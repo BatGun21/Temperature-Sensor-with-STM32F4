@@ -24,6 +24,7 @@
 #include "stm32f4xx.h"
 #include <string.h>
 #include "stdio.h"
+#include <math.h>
 
 /* USER CODE END Includes */
 
@@ -64,6 +65,7 @@ volatile uint16_t pwmOutput = 0; // PWM output value for relay control
 int counter = 0;
 char msg2 [50];
 char msg [20];
+char msg3 [50];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -86,6 +88,8 @@ void Voltage_Print(void);
 void printTimestamp(void);
 float adcValtoVolts (uint16_t adcVal);
 void print_adcval(void);
+float readTemperature(void);
+void TemperaturePrint (void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -129,8 +133,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
   LED_init();
   adc_init();
-
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -139,7 +141,7 @@ int main(void)
   {
     /* USER CODE END WHILE */
 //	  PIDControlLoop();
-	  Voltage_Print();
+	  TemperaturePrint();
 	  DelayMSW(1000);
     /* USER CODE BEGIN 3 */
   }
@@ -393,13 +395,13 @@ void SysTick_Handler(void) {
 void Voltage_Print(void){ // Debug function
 	uint16_t adcVal = read_adc(ADC_CHANNEL);
 	float Vin = adcValtoVolts(adcVal);
-	sprintf(msg2, " Vol = %.3f V ", Vin);
+	sprintf(msg2, "%.3f/n ", Vin);
 	printTimestamp();
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg2), strlen(msg2), 200);
 }
 
 void printTimestamp(void) { // Debug
-	sprintf(msg, " Time = %d ms:", counter);
+	sprintf(msg, "%d,", counter);
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg), strlen(msg), 200);
 }
 
@@ -409,6 +411,32 @@ float adcValtoVolts (uint16_t adcVal){
 //	Vin += (0.6/30.0)*Vin; //Correction using observation
 	return Vin;
 }
+
+void TemperaturePrint (void){ //Debug
+	float temp_in = readTemperature();
+	sprintf(msg3, " Temp = %.1f deg C/n ", temp_in);
+	printTimestamp();
+	HAL_UART_Transmit(&huart2, (uint8_t*)(msg3), strlen(msg3), 200);
+}
+
+float readTemperature(void) {
+
+	uint16_t adcVal = read_adc(ADC_CHANNEL);
+	float voltage = adcValtoVolts(adcVal);
+
+	// Coefficients of the polynomial equation
+	const float coefficients[] = {1289.78801301f, -9160.83019487f, 24253.89976964f, -28439.16295386f, 12535.517037f}; // Range is 30 deg C to 60 deg C
+
+    float result = 0.0f;
+    for (int i = 0; i <= 4; ++i) {
+        result += coefficients[i] * powf(voltage, 4 - i);
+    }
+    return result;
+}
+
+
+
+
 
 /* USER CODE END 4 */
 
