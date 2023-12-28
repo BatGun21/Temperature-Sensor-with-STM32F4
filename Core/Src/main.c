@@ -34,8 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TARGET_TEMPERATURE 50.0 // Target temperature
-#define KP 1.0 // Proportional gain
+#define TARGET_TEMPERATURE 30.0// Target temperature
+#define KP 6.0 // Proportional gain
 #define KI 0.0 // Integral gain
 #define KD 0.0 // Derivative gain
 #define PID_MAX_VALUE 50 // Maximum PWM value for the relay control
@@ -49,8 +49,8 @@
 #define GPIO_PIN_HEATER_RELAY 0x00000002 //PC1
 #define GPIO_PIN_SWITCH GPIO_IDR_ID0 //PA0
 #define GPIO_PORT_RELAY GPIOC
-#define PWM_PERIOD 60000 // 60 seconds
-#define MIN_DUTY_CYCLE 2 // per cent
+#define PWM_PERIOD 10000 // 60 seconds
+#define MIN_DUTY_CYCLE 1 // per cent
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -114,7 +114,7 @@ struct Wait {
 	int activeFlag;
 };
 
-struct Wait OneMin = {0, 60000, 0};
+struct Wait OneMin = {0, 5000, 0};
 struct Wait OneSec = {0, 1000, 0};
 
 /* USER CODE END 0 */
@@ -160,16 +160,17 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  SetWaitOneMin();
-
-	  if (time_expired(OneMin.delayTime, OneMin.currentTime)){
-		  PIDControlLoop();
-		  OneMin.activeFlag = 0;
-	  }
+//	  SetWaitOneMin();
+//
+//	  if (time_expired(OneMin.delayTime, OneMin.currentTime)){
+//
+//		  OneMin.activeFlag = 0;
+//	  }
 
 	  SetWaitOneSec();
 
 	  if (time_expired(OneSec.delayTime, OneSec.currentTime)){
+		  PIDControlLoop();
 		  TemperaturePrint();
 		  print_pidOutpuVal();
 		  OneSec.activeFlag = 0;
