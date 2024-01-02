@@ -34,7 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TARGET_TEMPERATURE 30.0// Target temperature
+#define TARGET_TEMPERATURE 40.0// Target temperature
 #define KP 6.0 // Proportional gain
 #define KI 0.0 // Integral gain
 #define KD 0.0 // Derivative gain
@@ -101,7 +101,7 @@ void Config_RelayCTRL_Pin(void);
 void Timer3_Init(void);
 float Percentage(float currentValue, float maxValue);
 void Timer2_Init(void);
-void SetWaitOneMin(void);
+void SetWaitTenSec(void);
 void SetWaitOneSec(void);
 void print_pidOutpuVal(void);
 /* USER CODE END PFP */
@@ -114,7 +114,7 @@ struct Wait {
 	int activeFlag;
 };
 
-struct Wait OneMin = {0, 5000, 0};
+struct Wait TenSec = {0, 10000, 0};
 struct Wait OneSec = {0, 1000, 0};
 
 /* USER CODE END 0 */
@@ -160,17 +160,16 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-//	  SetWaitOneMin();
-//
-//	  if (time_expired(OneMin.delayTime, OneMin.currentTime)){
-//
-//		  OneMin.activeFlag = 0;
-//	  }
+	  SetWaitTenSec();
+
+	  if (time_expired(TenSec.delayTime, TenSec.currentTime)){
+		  PIDControlLoop();
+		  TenSec.activeFlag = 0;
+	  }
 
 	  SetWaitOneSec();
 
 	  if (time_expired(OneSec.delayTime, OneSec.currentTime)){
-		  PIDControlLoop();
 		  TemperaturePrint();
 		  print_pidOutpuVal();
 		  OneSec.activeFlag = 0;
@@ -287,10 +286,10 @@ void print_pidOutpuVal(void){ // Debug
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg4), strlen(msg4), 200);
 }
 
-void SetWaitOneMin(void){
-	  if (!OneMin.activeFlag){
-		  OneMin.currentTime = counter;
-		  OneMin.activeFlag = 1;
+void SetWaitTenSec(void){
+	  if (!TenSec.activeFlag){
+		  TenSec.currentTime = counter;
+		  TenSec.activeFlag = 1;
 	  }
 }
 
