@@ -34,11 +34,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TARGET_TEMPERATURE 40.0// Target temperature
-#define KP 6.0 // Proportional gain
-#define KI 0.0 // Integral gain
+#define TARGET_TEMPERATURE 50.0// Target temperature
+#define KP 15.0 // Proportional gain
+#define KI 0.1 // Integral gain
 #define KD 0.0 // Derivative gain
-#define PID_MAX_VALUE 50 // Maximum PWM value for the relay control
+#define PID_MAX_VALUE 100 // Maximum PWM value for the relay control
 #define PID_MIN_VALUE 1 // Minimum PWM value for the relay control
 #define Clock_Frequency 16000 // in KHz
 #define GPIO_PORT_LEDS GPIOD
@@ -49,7 +49,7 @@
 #define GPIO_PIN_HEATER_RELAY 0x00000002 //PC1
 #define GPIO_PIN_SWITCH GPIO_IDR_ID0 //PA0
 #define GPIO_PORT_RELAY GPIOC
-#define PWM_PERIOD 10000 // 60 seconds
+#define PWM_PERIOD 60000 // 60 seconds
 #define MIN_DUTY_CYCLE 1 // per cent
 /* USER CODE END PD */
 
@@ -101,7 +101,7 @@ void Config_RelayCTRL_Pin(void);
 void Timer3_Init(void);
 float Percentage(float currentValue, float maxValue);
 void Timer2_Init(void);
-void SetWaitTenSec(void);
+void SetWaitPidLoopUpdate(void);
 void SetWaitOneSec(void);
 void print_pidOutpuVal(void);
 /* USER CODE END PFP */
@@ -114,7 +114,7 @@ struct Wait {
 	int activeFlag;
 };
 
-struct Wait TenSec = {0, 10000, 0};
+struct Wait pidLoopUpdateWait = {0, 8000, 0};
 struct Wait OneSec = {0, 1000, 0};
 
 /* USER CODE END 0 */
@@ -160,18 +160,17 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  SetWaitTenSec();
+	  SetWaitPidLoopUpdate();
 
-	  if (time_expired(TenSec.delayTime, TenSec.currentTime)){
+	  if (time_expired(pidLoopUpdateWait.delayTime, pidLoopUpdateWait.currentTime)){
 		  PIDControlLoop();
-		  TenSec.activeFlag = 0;
+		  pidLoopUpdateWait.activeFlag = 0;
 	  }
 
 	  SetWaitOneSec();
 
 	  if (time_expired(OneSec.delayTime, OneSec.currentTime)){
 		  TemperaturePrint();
-		  print_pidOutpuVal();
 		  OneSec.activeFlag = 0;
 	  }
     /* USER CODE END WHILE */
@@ -286,10 +285,10 @@ void print_pidOutpuVal(void){ // Debug
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg4), strlen(msg4), 200);
 }
 
-void SetWaitTenSec(void){
-	  if (!TenSec.activeFlag){
-		  TenSec.currentTime = counter;
-		  TenSec.activeFlag = 1;
+void SetWaitPidLoopUpdate(void){
+	  if (!pidLoopUpdateWait.activeFlag){
+		  pidLoopUpdateWait.currentTime = counter;
+		  pidLoopUpdateWait.activeFlag = 1;
 	  }
 }
 
@@ -542,7 +541,7 @@ float adcValtoVolts (uint16_t adcVal){
 
 void TemperaturePrint (void){ //Debug
 	float temp_in = readTemperature();
-	sprintf(msg3, " Temp = %.1f deg C/n ", temp_in);
+	sprintf(msg3, "%.1f,", temp_in);
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg3), strlen(msg3), 200);
 }
 
