@@ -34,9 +34,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TARGET_TEMPERATURE 50.0// Target temperature
+#define TARGET_TEMPERATURE 40.0// Target temperature
 #define KP 15.0 // Proportional gain
-#define KI 0.1 // Integral gain
+#define KI 3.0 // Integral gain
 #define KD 0.0 // Derivative gain
 #define PID_MAX_VALUE 100 // Maximum PWM value for the relay control
 #define PID_MIN_VALUE 1 // Minimum PWM value for the relay control
@@ -51,6 +51,8 @@
 #define GPIO_PORT_RELAY GPIOC
 #define PWM_PERIOD 60000 // 60 seconds
 #define MIN_DUTY_CYCLE 1 // per cent
+#define MOVING_AVERAGE_SIZE 10
+#define NOISE_THRESHOLD 50.0
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -72,6 +74,8 @@ char msg2 [50];
 char msg [20];
 char msg3 [50];
 char msg4 [50];
+float temperatureBuffer[MOVING_AVERAGE_SIZE]; // Buffer for temperature readings
+int bufferIndex = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -104,6 +108,8 @@ void Timer2_Init(void);
 void SetWaitPidLoopUpdate(void);
 void SetWaitOneSec(void);
 void print_pidOutpuVal(void);
+float MovingAverage(float newValue);
+float RemoveOutliers(float newValue, float movingAverage);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -324,7 +330,7 @@ void PIDControlLoop(void) {
     }
     // If too low value set to 0
     if (pidOutput < PID_MIN_VALUE) {
-        pidOutput = 0.0;
+        pidOutput = PID_MIN_VALUE;
     }
     pidOutput = Percentage(pidOutput, PID_MAX_VALUE);
 
@@ -550,14 +556,45 @@ float readTemperature(void) {
 	uint16_t adcVal = read_adc(ADC_CHANNEL);
 	float voltage = adcValtoVolts(adcVal);
 
-	// Coefficients of the polynomial equation
-	const float coefficients[] = {1289.78801301f, -9160.83019487f, 24253.89976964f, -28439.16295386f, 12535.517037f}; // Range is 25 deg C to 60 deg C
+    // Coefficients of the polynomial equation
+    const float coefficients[] = {1289.78801301f, -9160.83019487f, 24253.89976964f, -28439.16295386f, 12535.517037f}; // Range is 25 deg C to 60 deg C
 
     float result = 0.0f;
     for (int i = 0; i <= 4; ++i) {
         result += coefficients[i] * powf(voltage, 4 - i);
     }
-    return result;
+
+    // Apply the moving average filter
+    float movingAverage = MovingAverage(result);
+
+    // Remove outliers
+    float filteredTemperature = RemoveOutliers(result, movingAverage);
+
+    return filteredTemperature;
+}
+
+float RemoveOutliers(float newValue, float movingAverage) {
+
+    if (fabs(newValue - movingAverage) > NOISE_THRESHOLD) {
+        return movingAverage;
+    } else {
+        return newValue;
+    }
+}
+
+float MovingAverage(float newValue) {
+
+    temperatureBuffer[bufferIndex] = newValue;
+
+    bufferIndex = (bufferIndex + 1) % MOVING_AVERAGE_SIZE;
+
+    float sum = 0.0;
+    for (int i = 0; i < MOVING_AVERAGE_SIZE; i++) {
+        sum += temperatureBuffer[i];
+    }
+    float movingAverage = sum / MOVING_AVERAGE_SIZE;
+
+    return movingAverage;
 }
 
 float Percentage(float currentValue, float maxValue) {
