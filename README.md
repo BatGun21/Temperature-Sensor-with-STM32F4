@@ -55,3 +55,10 @@ The PID control loop is implemented in the STM32F4 microcontroller. The three co
 
 - **Relay Control:**
   - Relay control for the bulb includes a pull-up resistor for proper functioning.
+
+# Temperature Controller with PID
+
+## Temperature Variation Over Time
+
+![Temperature Variation](https://github.com/BatGun21/Temperature-Sensor-with-STM32F4/blob/main/Temperature_Plots/Temperature-Variation-Over-Time.jpg)
+
