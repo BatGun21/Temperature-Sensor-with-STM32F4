@@ -34,25 +34,27 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TARGET_TEMPERATURE 40.0// Target temperature
-#define KP 15.0 // Proportional gain
-#define KI 3.0 // Integral gain
+#define TARGET_TEMPERATURE 20.0// Target temperature
+#define KP 27.0 // Proportional gain
+#define KI 1.0// Integral gain
 #define KD 0.0 // Derivative gain
 #define PID_MAX_VALUE 100 // Maximum PWM value for the relay control
-#define PID_MIN_VALUE 1 // Minimum PWM value for the relay control
+#define PID_MIN_VALUE 0 // Minimum PWM value for the relay control
+#define DUTYCYCLE_MAX_VALUE 75 // per cent
+#define DUTYCYCLE_MIN_VALUE 25 // per cent
 #define Clock_Frequency 16000 // in KHz
 #define GPIO_PORT_LEDS GPIOD
 #define GPIO_PORT_ADC GPIOB
 #define ADC_CHANNEL 9
 #define ON 1
 #define OFF 0
-#define GPIO_PIN_HEATER_RELAY 0x00000002 //PC1
+#define GPIO_PIN_Compressor_Relay 0x00000002 //PC1
 #define GPIO_PIN_SWITCH GPIO_IDR_ID0 //PA0
 #define GPIO_PORT_RELAY GPIOC
 #define PWM_PERIOD 60000 // 60 seconds
-#define MIN_DUTY_CYCLE 1 // per cent
+#define MIN_DUTY_CYCLE 25 // per cent
 #define MOVING_AVERAGE_SIZE 10
-#define NOISE_THRESHOLD 50.0
+#define NOISE_THRESHOLD 3.0
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -100,7 +102,6 @@ void print_adcval(void);
 float readTemperature(void);
 void TemperaturePrint (void);
 void ConfigureVoltageSourcePin(void);
-void RelayCTRL(int state);
 void Config_RelayCTRL_Pin(void);
 void Timer3_Init(void);
 float Percentage(float currentValue, float maxValue);
@@ -120,7 +121,7 @@ struct Wait {
 	int activeFlag;
 };
 
-struct Wait pidLoopUpdateWait = {0, 8000, 0};
+struct Wait pidLoopUpdateWait = {0, 15000, 0};
 struct Wait OneSec = {0, 1000, 0};
 
 /* USER CODE END 0 */
@@ -175,8 +176,10 @@ int main(void)
 
 	  SetWaitOneSec();
 
-	  if (time_expired(OneSec.delayTime, OneSec.currentTime)){
-		  TemperaturePrint();
+	  if (time_expired(OneSec.delayTime, OneSec.currentTime)){\
+		  print_pidOutpuVal();
+	  	  TemperaturePrint();
+//	  	  Voltage_Print();
 		  OneSec.activeFlag = 0;
 	  }
     /* USER CODE END WHILE */
@@ -287,7 +290,7 @@ void print_adcval(void){ // Debug
 }
 
 void print_pidOutpuVal(void){ // Debug
-	sprintf(msg4, " PID Output = %f ", pidOutput);
+	sprintf(msg4, "%.3f,", pidOutput);
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg4), strlen(msg4), 200);
 }
 
@@ -307,7 +310,7 @@ void SetWaitOneSec(void){
 
 void ControlRelay(float dutycycle) {
 
-    uint32_t dutyValue = (uint32_t)((100-dutycycle) * (PWM_PERIOD/ 100)); // NPN Transistor to relay
+    uint32_t dutyValue = (uint32_t)((100 - dutycycle) * (PWM_PERIOD/ 100)); // NPN Transistor to relay
 
     // Set the duty cycle
     TIM3->CCR1 = dutyValue;
@@ -316,20 +319,20 @@ void ControlRelay(float dutycycle) {
 void PIDControlLoop(void) {
     currentTemperature = readTemperature();
 
-    error = TARGET_TEMPERATURE - currentTemperature;
+    error = (currentTemperature - TARGET_TEMPERATURE);
 
     integral += error;
 
     derivative = error - derivative;
 
-    pidOutput = (KP * error + KI * integral + KD * derivative);
+    pidOutput = KP * error + KI * integral + KD * derivative;
 
     // Limit the PWM output to the maximum value
-    if (pidOutput > PID_MAX_VALUE) {
+    if (pidOutput > DUTYCYCLE_MAX_VALUE) {
         pidOutput = PID_MAX_VALUE;
     }
     // If too low value set to 0
-    if (pidOutput < PID_MIN_VALUE) {
+    if (pidOutput < DUTYCYCLE_MIN_VALUE) {
         pidOutput = PID_MIN_VALUE;
     }
     pidOutput = Percentage(pidOutput, PID_MAX_VALUE);
@@ -371,10 +374,10 @@ void Timer3_Init(void) {
 
     // PC6 as alternate function (TIM3 CH1)
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
-    GPIOC->MODER |= GPIO_MODER_MODER6_1;  // Alternate function mode
-    GPIOC->AFR[0] |= 0x02000000;  // AF02 for PC6 (TIM3 CH1)
-    GPIOC->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6;  // High speed
-    GPIOC->OTYPER |= 0x0040; // Open Drain
+    GPIO_PORT_RELAY->MODER |= GPIO_MODER_MODER6_1;  // Alternate function mode
+    GPIO_PORT_RELAY->AFR[0] |= 0x02000000;  // AF02 for PC6 (TIM3 CH1)
+    GPIO_PORT_RELAY->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR6;  // High speed
+    GPIO_PORT_RELAY->OTYPER |= 0x0040; // Open Drain
 
     // TIM3
     TIM3->PSC = Clock_Frequency - 1;  // Prescaler to achieve 1ms tick with 16MHz clock
@@ -419,14 +422,6 @@ void ConfigureVoltageSourcePin(void) {
 
     // Configure PC1 to high speed
     GPIO_PORT_RELAY->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR1;
-}
-
-void RelayCTRL(int state){
-	if (state){
-		GPIO_PORT_RELAY->ODR &= ~(GPIO_PIN_HEATER_RELAY);
-	}else{
-		GPIO_PORT_RELAY->ODR |= (GPIO_PIN_HEATER_RELAY);
-	}
 }
 
 void LED_init(void){
@@ -528,8 +523,7 @@ void SysTick_Handler(void) {
 void Voltage_Print(void){ // Debug function
 	uint16_t adcVal = read_adc(ADC_CHANNEL);
 	float Vin = adcValtoVolts(adcVal);
-	sprintf(msg2, "%.3f/n ", Vin);
-	printTimestamp();
+	sprintf(msg2, "Vol = %.3f/n ", Vin);
 	HAL_UART_Transmit(&huart2, (uint8_t*)(msg2), strlen(msg2), 200);
 }
 
@@ -557,9 +551,9 @@ float readTemperature(void) {
 	float voltage = adcValtoVolts(adcVal);
 
     // Coefficients of the polynomial equation
-    const float coefficients[] = {1289.78801301f, -9160.83019487f, 24253.89976964f, -28439.16295386f, 12535.517037f}; // Range is 25 deg C to 60 deg C
+    const float coefficients[] = { 13000.8914445 ,  -99474.67447538,  285225.49823225, -363335.0395916 ,  173570.90571022}; // Range is 25 deg C to 60 deg C
 
-    float result = 0.0f;
+    float result = 0.0;
     for (int i = 0; i <= 4; ++i) {
         result += coefficients[i] * powf(voltage, 4 - i);
     }
