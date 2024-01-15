@@ -34,8 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TARGET_TEMPERATURE 20.0// Target temperature
-#define KP 27.0 // Proportional gain
+#define TARGET_TEMPERATURE 23.0// Target temperature
+#define KP 26.0 // Proportional gain
 #define KI 1.0// Integral gain
 #define KD 0.0 // Derivative gain
 #define PID_MAX_VALUE 100 // Maximum PWM value for the relay control
@@ -53,8 +53,10 @@
 #define GPIO_PORT_RELAY GPIOC
 #define PWM_PERIOD 60000 // 60 seconds
 #define MIN_DUTY_CYCLE 25 // per cent
-#define MOVING_AVERAGE_SIZE 10
-#define NOISE_THRESHOLD 3.0
+#define MOVING_AVERAGE_SIZE 10 //
+#define NOISE_THRESHOLD 3.0 // deg Celsius
+#define SAMPLING_INTERVAL_MS 500   // Sampling interval in milliseconds
+#define AVERAGING_WINDOW_SIZE 100  // Number of samples for averaging in time
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -78,6 +80,9 @@ char msg3 [50];
 char msg4 [50];
 float temperatureBuffer[MOVING_AVERAGE_SIZE]; // Buffer for temperature readings
 int bufferIndex = 0;
+static float rollingSum = 0.0;
+static int sampleCount = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -111,6 +116,7 @@ void SetWaitOneSec(void);
 void print_pidOutpuVal(void);
 float MovingAverage(float newValue);
 float RemoveOutliers(float newValue, float movingAverage);
+void SetWait500ms(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -123,6 +129,7 @@ struct Wait {
 
 struct Wait pidLoopUpdateWait = {0, 15000, 0};
 struct Wait OneSec = {0, 1000, 0};
+static struct Wait wait500ms = {0, SAMPLING_INTERVAL_MS, 0};
 
 /* USER CODE END 0 */
 
@@ -308,6 +315,13 @@ void SetWaitOneSec(void){
 	  }
 }
 
+void SetWait500ms(void){
+	  if (!wait500ms.activeFlag){
+		  wait500ms.currentTime = counter;
+		  wait500ms.activeFlag = 1;
+	  }
+}
+
 void ControlRelay(float dutycycle) {
 
     uint32_t dutyValue = (uint32_t)((100 - dutycycle) * (PWM_PERIOD/ 100)); // NPN Transistor to relay
@@ -331,7 +345,7 @@ void PIDControlLoop(void) {
     if (pidOutput > DUTYCYCLE_MAX_VALUE) {
         pidOutput = PID_MAX_VALUE;
     }
-    // If too low value set to 0
+    // If too low value set to minimum PID Vlaue
     if (pidOutput < DUTYCYCLE_MIN_VALUE) {
         pidOutput = PID_MIN_VALUE;
     }
@@ -547,25 +561,40 @@ void TemperaturePrint (void){ //Debug
 
 float readTemperature(void) {
 
-	uint16_t adcVal = read_adc(ADC_CHANNEL);
-	float voltage = adcValtoVolts(adcVal);
+    float averageTemperature = 0.0;
+
+    SetWait500ms();
+
+    if (time_expired(wait500ms.delayTime, wait500ms.currentTime)) {
+        rollingSum = 0.0;
+        sampleCount = 0;
+        wait500ms.activeFlag = 0;
+    }
+
+    uint16_t adcVal = read_adc(ADC_CHANNEL);
+    float voltage = adcValtoVolts(adcVal);
 
     // Coefficients of the polynomial equation
-    const float coefficients[] = { 13000.8914445 ,  -99474.67447538,  285225.49823225, -363335.0395916 ,  173570.90571022}; // Range is 25 deg C to 60 deg C
+    const float coefficients[] = {13000.8914445, -99474.67447538, 285225.49823225, -363335.0395916, 173570.90571022}; // Range is 25 deg C to 60 deg C
 
     float result = 0.0;
     for (int i = 0; i <= 4; ++i) {
         result += coefficients[i] * powf(voltage, 4 - i);
     }
 
-    // Apply the moving average filter
-    float movingAverage = MovingAverage(result);
+    rollingSum += result;
 
-    // Remove outliers
-    float filteredTemperature = RemoveOutliers(result, movingAverage);
+    sampleCount++;
+
+    averageTemperature = rollingSum / sampleCount;
+
+    float movingAverage = MovingAverage(averageTemperature);
+
+    float filteredTemperature = RemoveOutliers(averageTemperature, movingAverage);
 
     return filteredTemperature;
 }
+
 
 float RemoveOutliers(float newValue, float movingAverage) {
 
